@@ -1,0 +1,17 @@
+{
+  "BtcJsonRpcAddress": "http://139.219.140.220:20332",
+  "User": "test",
+  "Pwd": "test",
+  "AllianceJsonRpcAddress": "http://172.168.3.73:40336",
+  "NetType": "test",
+  "GasPrice": 0,
+  "GasLimit": 200000,
+  "WalletFile": "./wallet.dat",
+  "WalletPwd": "passwordtest",
+  "BtcObFirstN": 50,
+  "BtcObLoopWaitTime": 300,
+  "BtcObConfirmations": 1,
+  "AlliaObFirstN": 1000,
+  "AlliaObLoopWaitTime": 10,
+  "WatchingKey": "makeBtcTx"
+}
