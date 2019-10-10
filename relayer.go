@@ -19,6 +19,7 @@ type BtcRelayer struct {
 	Collecting chan *observer.FromAllianceItem
 	allia      *sdk.MultiChainSdk
 	config     *BtcConfig
+	cli        *observer.RestCli
 }
 
 func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
@@ -62,6 +63,7 @@ func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
 		Collecting: make(chan *observer.FromAllianceItem, 10),
 		allia:      allia,
 		config:     conf,
+		cli:        observer.NewRestCli(conf.BtcJsonRpcAddress, conf.User, conf.Pwd),
 	}, nil
 }
 
@@ -71,6 +73,18 @@ func (relayer *BtcRelayer) BtcListen() {
 
 func (relayer *BtcRelayer) AllianceListen() {
 	relayer.alliaOb.Listen(relayer.Collecting)
+}
+
+func (relayer *BtcRelayer) Broadcast() {
+	log.Infof("[BtcRelayer] start broadcasting")
+	for item := range relayer.Collecting {
+		txid, err := relayer.cli.BroadcastTx(item.Tx)
+		if err != nil {
+			log.Errorf("[BtcRelayer] failed to broadcast tx: %v", err)
+			continue
+		}
+		log.Infof("[BtcRelayer] already broadcast tx: %s", txid)
+	}
 }
 
 func (relayer *BtcRelayer) Relay() {

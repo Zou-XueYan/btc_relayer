@@ -13,5 +13,5 @@
   "BtcObConfirmations": 1,
   "AlliaObFirstN": 1000,
   "AlliaObLoopWaitTime": 10,
-  "WatchingKey": "makeBtcTx"
+  "WatchingKey": "btcTxToRelay"
 }

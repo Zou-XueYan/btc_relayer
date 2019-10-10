@@ -191,7 +191,10 @@ START:
 
 				name, ok := states[0].(string)
 				if ok && name == observer.conf.WatchingKey {
-					tx := states[1].(string)
+					tx, ok := states[1].(string)
+					if !ok {
+						continue
+					}
 					collecting <- &FromAllianceItem{
 						Tx: tx,
 					}
@@ -239,7 +242,10 @@ START:
 					}
 					name, ok := states[0].(string)
 					if ok && name == observer.conf.WatchingKey {
-						tx := states[1].(string)
+						tx, ok := states[1].(string)
+						if !ok {
+							continue
+						}
 						collecting <- &FromAllianceItem{
 							Tx: tx,
 						}

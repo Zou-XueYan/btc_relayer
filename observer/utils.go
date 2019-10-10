@@ -234,7 +234,7 @@ func (cli *RestCli) GetScriptPubKey(txid string, index uint32) (string, error) {
 	return resp.Result.(map[string]interface{})["vout"].([]interface{})[index].(map[string]interface{})["scriptPubKey"].(map[string]interface{})["hex"].(string), nil
 }
 
-func (cli *RestCli) BroadcastTx(txid, tx string) error {
+func (cli *RestCli) BroadcastTx(tx string) (string, error) {
 	req, err := json.Marshal(Request{
 		Jsonrpc: "1.0",
 		Method:  "sendrawtransaction",
@@ -242,16 +242,16 @@ func (cli *RestCli) BroadcastTx(txid, tx string) error {
 		Id:      1,
 	})
 	if err != nil {
-		return fmt.Errorf("[BroadcastTx] failed to marshal request: %v", err)
+		return "", fmt.Errorf("[BroadcastTx] failed to marshal request: %v", err)
 	}
 
 	resp, err := cli.sendPostReq(req)
 	if err != nil {
-		return fmt.Errorf("[BroadcastTx] failed to send post: %v", err)
+		return "", fmt.Errorf("[BroadcastTx] failed to send post: %v", err)
 	}
 	if resp.Error != nil {
-		return fmt.Errorf("[BroadcastTx] response shows failure: %v", resp.Error.Message)
+		return "", fmt.Errorf("[BroadcastTx] response shows failure: %v", resp.Error.Message)
 	}
 
-	return nil
+	return resp.Result.(string), nil
 }

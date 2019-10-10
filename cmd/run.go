@@ -4,7 +4,6 @@ import (
 	"flag"
 	"github.com/Zou-XueYan/btc_relayer"
 	"github.com/Zou-XueYan/btc_relayer/log"
-	"github.com/Zou-XueYan/btc_relayer/signer"
 )
 
 var confFile string
@@ -26,17 +25,10 @@ func main() {
 		log.Errorf("Failed to new a relayer: %v", err)
 	}
 
-	m, err := signer.NewSigningMachine(confFile)
-	if err != nil {
-		log.Errorf("Failed to new a signing machine: %v", err)
-	}
-
 	go r.BtcListen()
 	go r.Relay()
 	go r.AllianceListen()
-
-	go m.Signing(r.Collecting)
-	go m.Broadcasting()
+	go r.Broadcast()
 
 	select {}
 }
