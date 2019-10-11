@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ADDR = "http://139.219.140.220:20332"
+	ADDR = "http://172.168.3.77:18443"//"http://139.219.140.220:20332"
 	USER = "test"
 	PWD  = "test"
 )
@@ -52,7 +52,11 @@ func TestRestCli_GetTxsInBlock(t *testing.T) {
 
 func TestBtcObserver_SearchTxInBlock(t *testing.T) {
 	line := make(chan *CrossChainItem, 2)
-	o := NewBtcObserver(ADDR, USER, PWD, &chaincfg.TestNet3Params)
+	o := NewBtcObserver(ADDR, USER, PWD, &chaincfg.TestNet3Params, &BtcObConfig{
+		FirstN:        100,
+		LoopWaitTime:  10,
+		Confirmations: 6,
+	})
 	txns, _, err := o.cli.GetTxsInBlock("00000000000000e8480643ba362b80f449a94743b65cefc03a460bf42167d3fc")
 	if err != nil {
 		t.Fatalf("Failed to get txns: %v", err)
@@ -76,7 +80,11 @@ func TestBtcObserver_SearchTxInBlock(t *testing.T) {
 
 func TestBtcObserver_Listen(t *testing.T) {
 	line := make(chan *CrossChainItem, 10)
-	o := NewBtcObserver(ADDR, USER, PWD, &chaincfg.TestNet3Params)
+	o := NewBtcObserver(ADDR, USER, PWD, &chaincfg.TestNet3Params, &BtcObConfig{
+		FirstN:        100,
+		LoopWaitTime:  10,
+		Confirmations: 6,
+	})
 	go o.Listen(line)
 	go func() {
 		for item := range line {
@@ -101,6 +109,13 @@ func TestRestCli_GetScriptPubKey(t *testing.T) {
 	fmt.Println(str)
 }
 
-func TestAllianceObserver_Listen(t *testing.T) {
+func TestRestCli_BroadcastTx(t *testing.T) {
+	rawtx := "01000000015a93813ac8d05a5a36168d3383ebb23d9c833443132ef4fda34242c7c74b966a020000006a4730440220793143bf61db374c268239646a386af25a25cdf24523089bb5c11c5ed177e3a902200aeb8230a8941ccde68c4cc915bbf657f6cbf58b18665736746db1b162e2152e012103128a2c4525179e47f38cf3fefca37a61548ca4610255b3fb4ee86de2d3e80c0fffffffff03102700000000000017a91487a9652e9b396545598c0fc72cb5a98848bf93d3870000000000000000276a256600000000000000020000000000000000dab47e816313a79c9459b544720c90a725264e0d10684a1f000000001976a91428d2e8cee08857f569e5a1b147c5d5e87339e08188ac00000000"
+	cli := NewRestCli(ADDR, USER, PWD)
+	txid, err := cli.BroadcastTx(rawtx)
+	if err != nil {
+		t.Fatal(err)
+	}
 
+	fmt.Println(txid)
 }
