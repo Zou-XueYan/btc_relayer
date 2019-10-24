@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/btcsuite/btcd/btcjson"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
@@ -25,10 +26,10 @@ const (
 )
 
 type CrossChainItem struct {
-	Tx     string
-	Proof  string
+	Tx     []byte
+	Proof  []byte
 	Height int32
-	Txid   string
+	Txid   chainhash.Hash
 }
 
 type FromAllianceItem struct {
@@ -64,9 +65,9 @@ func checkIfCrossChainTx(tx *wire.MsgTx, netParam *chaincfg.Params) bool {
 		return false
 	}
 
-	if int(tx.TxOut[1].PkScript[1]) != btc.OP_RETURN_DATA_LEN {
-		return false
-	}
+	//if int(tx.TxOut[1].PkScript[1]) != btc.OP_RETURN_DATA_LEN {
+	//	return false
+	//}
 
 	if tx.TxOut[1].PkScript[2] != btc.OP_RETURN_SCRIPT_FLAG {
 		return false
@@ -189,7 +190,7 @@ func (cli *RestCli) GetTxsInBlock(hash string) ([]*wire.MsgTx, string, error) {
 	return block.Transactions, block.Header.PrevBlock.String(), nil
 }
 
-func (cli *RestCli) GetCurrentHeightAndHash() (int32, string, error) {
+func (cli *RestCli) GetCurrentHeightAndHash() (uint32, string, error) {
 	reqTips, err := json.Marshal(Request{
 		Jsonrpc: "1.0",
 		Method:  "getchaintips",
@@ -209,7 +210,7 @@ func (cli *RestCli) GetCurrentHeightAndHash() (int32, string, error) {
 	}
 
 	m := resp.Result.([]interface{})[0].(map[string]interface{})
-	return int32(m["height"].(float64)), m["hash"].(string), nil
+	return uint32(m["height"].(float64)), m["hash"].(string), nil
 }
 
 func (cli *RestCli) GetScriptPubKey(txid string, index uint32) (string, error) {
@@ -250,8 +251,31 @@ func (cli *RestCli) BroadcastTx(tx string) (string, error) {
 		return "", fmt.Errorf("[BroadcastTx] failed to send post: %v", err)
 	}
 	if resp.Error != nil {
-		return "", fmt.Errorf("[BroadcastTx] response shows failure: %v", resp.Error.Message)
+		switch resp.Error.Code {
+		case btcjson.ErrRPCTxError:
+			return "", NeedToRetryErr{
+				Err: fmt.Errorf("[BroadcastTx] response shows failure and retry: code:%d; %v", resp.Error.Code, resp.Error.Message),
+			}
+		case btcjson.ErrRPCTxRejected:
+			return "", NeedToRetryErr{
+				Err: fmt.Errorf("[BroadcastTx] response shows failure and retry: code:%d; %v", resp.Error.Code, resp.Error.Message),
+			}
+		default:
+			return "", fmt.Errorf("[BroadcastTx] response shows failure: %v", resp.Error.Message)
+		}
 	}
 
 	return resp.Result.(string), nil
+}
+
+type NeedToRetryErr struct {
+	Err error
+}
+
+func (err NeedToRetryErr) Error() string {
+	return err.String()
+}
+
+func (err *NeedToRetryErr) String() string {
+	return err.Err.Error()
 }

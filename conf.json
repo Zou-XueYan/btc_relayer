@@ -13,5 +13,8 @@
   "BtcObConfirmations": 1,
   "AlliaObFirstN": 1000,
   "AlliaObLoopWaitTime": 10,
-  "WatchingKey": "btcTxToRelay"
+  "WatchingKey": "btcTxToRelay",
+  "RetryDuration": 1,
+  "RetryTimes": 2,
+  "RetryDBPath": "./"
 }

@@ -29,6 +29,7 @@ func main() {
 	go r.Relay()
 	go r.AllianceListen()
 	go r.Broadcast()
+	go r.ReBroadcast()
 
 	select {}
 }

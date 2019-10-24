@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ADDR = "http://172.168.3.77:18443"//"http://139.219.140.220:20332"
+	ADDR = "http://172.168.3.77:18443" //"http://139.219.140.220:20332"
 	USER = "test"
 	PWD  = "test"
 )
@@ -119,3 +119,4 @@ func TestRestCli_BroadcastTx(t *testing.T) {
 
 	fmt.Println(txid)
 }
+

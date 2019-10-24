@@ -12,9 +12,9 @@ import (
 )
 
 type BtcObConfig struct {
-	FirstN        int
+	FirstN        uint32
 	LoopWaitTime  int64
-	Confirmations int32
+	Confirmations uint32
 }
 
 type BtcObserver struct {
@@ -44,16 +44,18 @@ START:
 	// first to start, check FirstN blocks from top
 	log.Infof("[BtcObserver] first to start Listen(), check %d blocks from top %d", observer.conf.FirstN, top)
 	num := observer.conf.FirstN
+	if num > top {
+		num = top
+	}
 	h := top
 	cnt := 0
-	for num > 0 && h >= 0 {
+	for num > 0 {
 		txns, prev, err := observer.cli.GetTxsInBlock(hash)
 		if err != nil {
 			log.Errorf("[BtcObserver] failed to check block %s: %v", hash, err)
 			time.Sleep(time.Second * 10)
 			continue
 		}
-
 		count, err := observer.SearchTxInBlock(txns, h, relaying)
 		if err != nil {
 			log.Errorf("[BtcObserver] failed to search in block %s, retry after 10 sec: %v", hash, err)
@@ -87,7 +89,7 @@ START:
 			continue
 		}
 		h := newTop
-		for num+observer.conf.Confirmations > 0 && h >= 0 {
+		for num+observer.conf.Confirmations > 0 {
 			txns, prev, err := observer.cli.GetTxsInBlock(hash)
 			if err != nil {
 				log.Errorf("[BtcObserver] failed to check block %s, retry after 10 sec: %v", hash, err)
@@ -123,18 +125,27 @@ func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height int32, r
 		var buf bytes.Buffer
 		err := tx.BtcEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
 		if err != nil {
-			return count, fmt.Errorf("[SearchTxInBlock] failed to encode transaction: %v", err)
+			log.Errorf("[SearchTxInBlock] failed to encode transaction: %v", err)
+			continue
 		}
 
 		proof, err := observer.cli.GetProof([]string{tx.TxHash().String()})
 		if err != nil {
-			return count, fmt.Errorf("[SearchTxInBlock] failed to get proof for tx %s", tx.TxHash().String())
+			log.Errorf("[SearchTxInBlock] failed to get proof for tx %s", tx.TxHash().String())
+			continue
 		}
+		proofBytes, err := hex.DecodeString(proof)
+		if err != nil {
+			log.Errorf("[SearchTxInBlock] failed to decode proof in hex: %v", err)
+			continue
+		}
+
+		fmt.Println(hex.EncodeToString(buf.Bytes()))
 		relaying <- &CrossChainItem{
-			Proof:  proof,
-			Tx:     hex.EncodeToString(buf.Bytes()),
+			Proof:  proofBytes,
+			Tx:     buf.Bytes(),
 			Height: height,
-			Txid:   tx.TxHash().String(),
+			Txid:   tx.TxHash(),
 		}
 		log.Infof("[SearchTxInBlock] eligible transaction found, txid: %s", tx.TxHash().String())
 		count++
@@ -144,7 +155,7 @@ func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height int32, r
 }
 
 type AllianceObConfig struct {
-	FirstN       int
+	FirstN       uint32
 	LoopWaitTime int64
 	WatchingKey  string
 }
@@ -171,10 +182,13 @@ START:
 	}
 
 	num := observer.conf.FirstN
-	h := uint32(top)
+	if top < num {
+		num = top
+	}
+	h := top - num + 1
 	count := 0
 	log.Infof("[AllianceObserver] first to start Listen(), check %d blocks from top %d", num, top)
-	for num > 0 && h+1 > 0 {
+	for h <= top {
 		events, err := observer.allia.GetSmartContractEventByBlock(h)
 		if err != nil {
 			log.Errorf("[AllianceObserver] GetSmartContractEventByBlock failed, retry after 10 sec: %v", err)
@@ -203,8 +217,7 @@ START:
 				}
 			}
 		}
-		num--
-		h--
+		h++
 	}
 	log.Infof("[AllianceObserver] total %d transactions captured from %d blocks", count, observer.conf.FirstN)
 
@@ -219,14 +232,13 @@ START:
 		}
 		log.Tracef("[AllianceObserver] start observing from height %d", newTop)
 
-		num := int64(newTop - top)
-		if num == 0 {
+		if newTop - top == 0 {
 			//log.Infof("[AllianceObserver] height not change: height is %d", newTop)
 			continue
 		}
 
-		h := newTop
-		for num > 0 {
+		h := top + 1
+		for h <= newTop {
 			events, err := observer.allia.GetSmartContractEventByBlock(h)
 			if err != nil {
 				log.Errorf("[AllianceObserver] GetSmartContractEventByBlock failed, retry after 10 sec: %v", err)
@@ -255,8 +267,7 @@ START:
 				}
 			}
 
-			num--
-			h--
+			h++
 		}
 		if count > 0 {
 			log.Infof("[AllianceObserver] total %d transactions captured this time", count)

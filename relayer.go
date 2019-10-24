@@ -1,14 +1,19 @@
 package btc_relayer
 
 import (
+	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/Zou-XueYan/btc_relayer/db"
 	"github.com/Zou-XueYan/btc_relayer/log"
 	"github.com/Zou-XueYan/btc_relayer/observer"
 	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/wire"
 	sdk "github.com/ontio/multi-chain-go-sdk"
 	"io/ioutil"
 	"os"
+	"time"
 )
 
 type BtcRelayer struct {
@@ -20,6 +25,7 @@ type BtcRelayer struct {
 	allia      *sdk.MultiChainSdk
 	config     *BtcConfig
 	cli        *observer.RestCli
+	retryDB    *db.RetryDB
 }
 
 func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
@@ -47,6 +53,15 @@ func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
 		return nil, fmt.Errorf("GetAccountByPassword failed: %v", err)
 	}
 
+	if !checkIfExist(conf.RetryDBPath) {
+		os.Mkdir(conf.RetryDBPath, os.ModePerm)
+	}
+
+	rdb, err := db.NewRetryDB(conf.RetryDBPath, conf.RetryTimes, conf.RetryDuration)
+	if err != nil {
+		return nil, fmt.Errorf("failed to new retry db: %v", err)
+	}
+
 	return &BtcRelayer{
 		btcOb: observer.NewBtcObserver(conf.BtcJsonRpcAddress, conf.User, conf.Pwd, param, &observer.BtcObConfig{
 			FirstN:        conf.BtcObFirstN,
@@ -64,6 +79,7 @@ func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
 		allia:      allia,
 		config:     conf,
 		cli:        observer.NewRestCli(conf.BtcJsonRpcAddress, conf.User, conf.Pwd),
+		retryDB:    rdb,
 	}, nil
 }
 
@@ -75,25 +91,72 @@ func (relayer *BtcRelayer) AllianceListen() {
 	relayer.alliaOb.Listen(relayer.Collecting)
 }
 
+func (relayer *BtcRelayer) ReBroadcast() {
+	log.Info("[BtcRelayer] rebroadcasting")
+	tick := time.NewTicker(time.Duration(relayer.config.RetryDuration) * time.Minute)
+	for {
+		select {
+		case <-tick.C:
+			txArr, err := relayer.retryDB.GetAll()
+			if err != nil {
+				log.Debugf("[BtcRelayer] failed to get retry tx: %v", err)
+				continue
+			}
+			for _, s := range txArr {
+				txb, _ := hex.DecodeString(s)
+				mtx := wire.NewMsgTx(wire.TxVersion)
+				mtx.BtcDecode(bytes.NewBuffer(txb), wire.ProtocolVersion, wire.LatestEncoding)
+				txid, err := relayer.cli.BroadcastTx(s)
+				if err != nil {
+					switch err.(type) {
+					case observer.NeedToRetryErr:
+						log.Debugf("[BtcRelayer] rebroadcast %s failed: %v", mtx.TxHash().String(), err)
+					default:
+						log.Infof("[BtcRelayer] no need to rebroadcast and delete this tx %s...%s: %v", s[:6], s[len(s)-6:], err)
+						err = relayer.retryDB.Del(s)
+						if err != nil {
+							log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, s, err)
+						}
+					}
+				} else {
+					log.Infof("[BtcRelayer] rebroadcast and delete tx: %s", txid)
+					err = relayer.retryDB.Del(s)
+					if err != nil {
+						log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, s, err)
+					}
+				}
+			}
+		}
+	}
+}
+
 func (relayer *BtcRelayer) Broadcast() {
 	log.Infof("[BtcRelayer] start broadcasting")
 	for item := range relayer.Collecting {
 		txid, err := relayer.cli.BroadcastTx(item.Tx)
 		if err != nil {
-			log.Errorf("[BtcRelayer] failed to broadcast tx: %v", err)
+			switch err.(type) {
+			case observer.NeedToRetryErr:
+				log.Infof("[BtcRelayer] need to rebroadcast this tx %s...%s: %v", item.Tx[:6], item.Tx[len(item.Tx)-6:], err)
+				err = relayer.retryDB.Put(item.Tx)
+				if err != nil {
+					log.Errorf("[BtcRelayer] failed to put tx in db: %v", err)
+				}
+			default:
+				log.Errorf("[BtcRelayer] failed to broadcast tx: %v", err)
+			}
 			continue
 		}
-		log.Infof("[BtcRelayer] already broadcast tx: %s", txid)
+		log.Infof("[BtcRelayer] broadcast tx: %s", txid)
 	}
 }
 
 func (relayer *BtcRelayer) Relay() {
 	for item := range relayer.relaying {
 		log.Infof("[BtcRelayer] ralaying an item: txid: %s, height: %d", item.Txid, item.Height)
-
-		txHash, err := relayer.allia.Native.Ccm.ImportOuterTransfer(observer.BTC_ID, item.Tx, uint32(item.Height),
-			item.Proof, relayer.account.Address.ToBase58(), 0, "", relayer.account)
-		if err != nil { //TODO: retry ??
+		txHash, err := relayer.allia.Native.Ccm.ImportOuterTransfer(observer.BTC_ID, item.Txid[:], item.Tx, uint32(item.Height),
+			item.Proof, relayer.account.Address[:], relayer.account)
+		if err != nil {
 			log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
 			continue
 		}
@@ -120,12 +183,15 @@ type BtcConfig struct {
 	GasLimit               uint64
 	WalletFile             string
 	WalletPwd              string
-	BtcObFirstN            int // BtcOb:
+	BtcObFirstN            uint32 // BtcOb:
 	BtcObLoopWaitTime      int64
-	BtcObConfirmations     int32
-	AlliaObFirstN          int // AlliaOb:
+	BtcObConfirmations     uint32
+	AlliaObFirstN          uint32 // AlliaOb:
 	AlliaObLoopWaitTime    int64
 	WatchingKey            string
+	RetryDuration          int
+	RetryTimes             int
+	RetryDBPath            string
 }
 
 func NewBtcConfig(file string) (*BtcConfig, error) {
@@ -189,4 +255,12 @@ func GetAccountByPassword(sdk *sdk.MultiChainSdk, path, pwd string) (*sdk.Accoun
 		return nil, fmt.Errorf("getDefaultAccount error: %v", err)
 	}
 	return user, nil
+}
+
+func checkIfExist(dir string) bool {
+	_, err := os.Stat(dir)
+	if err != nil && !os.IsExist(err) {
+		return false
+	}
+	return true
 }
