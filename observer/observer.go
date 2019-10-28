@@ -3,10 +3,9 @@ package observer
 import (
 	"bytes"
 	"encoding/hex"
-	"fmt"
-	"github.com/Zou-XueYan/btc_relayer/log"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/ontio/btcrelayer/log"
 	sdk "github.com/ontio/multi-chain-go-sdk"
 	"time"
 )
@@ -116,7 +115,7 @@ START:
 	}
 }
 
-func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height int32, relaying chan *CrossChainItem) (int, error) {
+func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height uint32, relaying chan *CrossChainItem) (int, error) {
 	count := 0
 	for _, tx := range txns {
 		if !checkIfCrossChainTx(tx, observer.NetParam) {
@@ -140,7 +139,6 @@ func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height int32, r
 			continue
 		}
 
-		fmt.Println(hex.EncodeToString(buf.Bytes()))
 		relaying <- &CrossChainItem{
 			Proof:  proofBytes,
 			Tx:     buf.Bytes(),
@@ -232,7 +230,7 @@ START:
 		}
 		log.Tracef("[AllianceObserver] start observing from height %d", newTop)
 
-		if newTop - top == 0 {
+		if newTop-top == 0 {
 			//log.Infof("[AllianceObserver] height not change: height is %d", newTop)
 			continue
 		}

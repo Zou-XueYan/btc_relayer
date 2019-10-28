@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	"github.com/Zou-XueYan/btc_relayer"
-	"github.com/Zou-XueYan/btc_relayer/log"
+	"github.com/ontio/btcrelayer"
+	"github.com/ontio/btcrelayer/log"
 )
 
 var confFile string

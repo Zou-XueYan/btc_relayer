@@ -119,4 +119,3 @@ func TestRestCli_BroadcastTx(t *testing.T) {
 
 	fmt.Println(txid)
 }
-

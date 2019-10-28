@@ -28,7 +28,7 @@ const (
 type CrossChainItem struct {
 	Tx     []byte
 	Proof  []byte
-	Height int32
+	Height uint32
 	Txid   chainhash.Hash
 }
 
@@ -198,15 +198,15 @@ func (cli *RestCli) GetCurrentHeightAndHash() (uint32, string, error) {
 		Id:      1,
 	})
 	if err != nil {
-		return -1, "", fmt.Errorf("failed to marshal request: %v", err)
+		return 0, "", fmt.Errorf("failed to marshal request: %v", err)
 	}
 
 	resp, err := cli.sendPostReq(reqTips)
 	if err != nil {
-		return -1, "", fmt.Errorf("failed to send post: %v", err)
+		return 0, "", fmt.Errorf("failed to send post: %v", err)
 	}
 	if resp.Error != nil {
-		return -1, "", fmt.Errorf("response shows failure: %v", resp.Error.Message)
+		return 0, "", fmt.Errorf("response shows failure: %v", resp.Error.Message)
 	}
 
 	m := resp.Result.([]interface{})[0].(map[string]interface{})
