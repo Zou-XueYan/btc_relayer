@@ -7,22 +7,25 @@ import (
 )
 
 var confFile string
-var logPath string
-var logLevel int
 
 func init() {
 	flag.StringVar(&confFile, "conf-file", "../conf.json", "configuration file for btc relayer")
-	flag.StringVar(&logPath, "log-path", log.PATH, "log path for btc relayer")
-	flag.IntVar(&logLevel, "log-level", 0, "log level: 0 trace, 1 debug, 2 info, 3 warn, 4 error, 5 fatal")
 }
 
 func main() {
 	flag.Parse()
 
-	log.InitLog(logLevel, log.Stdout)
-	r, err := btc_relayer.NewBtcRelayer(confFile)
+	conf, err := btc_relayer.NewRelayerConfig(confFile)
+	if err != nil {
+		log.Errorf("failed to new a config: %v", err)
+		return
+	}
+
+	log.InitLog(conf.LogLevel, log.Stdout)
+	r, err := btc_relayer.NewBtcRelayer(conf)
 	if err != nil {
 		log.Errorf("Failed to new a relayer: %v", err)
+		return
 	}
 
 	go r.BtcListen()

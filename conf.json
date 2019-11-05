@@ -16,5 +16,7 @@
   "WatchingKey": "btcTxToRelay",
   "RetryDuration": 1,
   "RetryTimes": 2,
-  "RetryDBPath": "./"
+  "RetryDBPath": "./",
+  "LogLevel": 0,
+  "LogPath": ""
 }

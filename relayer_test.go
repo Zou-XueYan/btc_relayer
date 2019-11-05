@@ -1,12 +1,7 @@
 package btc_relayer
 
 import (
-	"bytes"
-	"encoding/hex"
 	"fmt"
-	"github.com/btcsuite/btcd/chaincfg/chainhash"
-	"github.com/btcsuite/btcd/txscript"
-	"github.com/btcsuite/btcd/wire"
 	"github.com/ontio/btcrelayer/log"
 	"os"
 	"testing"
@@ -25,8 +20,8 @@ var (
 	}
 )
 
-func TestNewBtcConfig(t *testing.T) {
-	conf, err := NewBtcConfig("./conf.json")
+func TestNewRelayerConfig(t *testing.T) {
+	conf, err := NewRelayerConfig("./conf.json")
 	if err != nil {
 		t.Fatalf("new btc config failed: %v", err)
 	}
@@ -35,7 +30,8 @@ func TestNewBtcConfig(t *testing.T) {
 }
 
 func TestNewBtcRelayer(t *testing.T) {
-	r, err := NewBtcRelayer("./conf.json")
+	conf, _ := NewRelayerConfig("./conf.json")
+	r, err := NewBtcRelayer(conf)
 	if err != nil {
 		t.Fatalf("Failed to new relayer: %v", err)
 	}
@@ -44,7 +40,8 @@ func TestNewBtcRelayer(t *testing.T) {
 }
 
 func TestBtcRelayer_BtcListen(t *testing.T) {
-	r, err := NewBtcRelayer("./conf.json")
+	conf, _ := NewRelayerConfig("./conf.json")
+	r, err := NewBtcRelayer(conf)
 	if err != nil {
 		t.Fatalf("Failed to new relayer: %v", err)
 	}
@@ -84,7 +81,8 @@ func TestBtcRelayer_BtcListen(t *testing.T) {
 //}
 
 func TestBtcRelayer_AllianceListen(t *testing.T) {
-	r, err := NewBtcRelayer("./conf.json")
+	conf, _ := NewRelayerConfig("./conf.json")
+	r, err := NewBtcRelayer(conf)
 	if err != nil {
 		t.Fatalf("Failed to new relayer: %v", err)
 	}
@@ -101,7 +99,8 @@ func TestBtcRelayer_AllianceListen(t *testing.T) {
 
 func TestBtcRelayer_ReBroadcast(t *testing.T) {
 	defer os.RemoveAll("./retry.bin")
-	r, err := NewBtcRelayer("./conf.json")
+	conf, _ := NewRelayerConfig("./conf.json")
+	r, err := NewBtcRelayer(conf)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -115,33 +114,13 @@ func TestBtcRelayer_ReBroadcast(t *testing.T) {
 }
 
 func TestS(t *testing.T) {
-	str := "0100000004950996957e73dadd1caab8e08907a6e6fbb633d8d16e6067e977abca2e4803cb00000000fd600200473044022064f97c64971231166509767f2f39ae1242b2a257741105d9a02267c3ccedb99e022068b892107b7809f613b58efdd427e404060e8a2c3f419b32c96a0c532e89a7f701483045022100cf8c762b785d94dca930e374de14a2d743d14bd27e9a42f7f65d3192b6c2ca8a022050c9a4e1a680d221afc5c7fadac0c1d375d484dec6d3a2f7a50ad594976492fe014830450221008ba2218f3ec64eb050ed66f00931dd08ea121545bc07749e0a93b68e69816f8d022075a6af7e7417a671dae4043bc66a35cc992f621150163e6d3c33f7a3a843b0b301483045022100bb032735121f847bcd5106c9222239808e0314814844de6b4f23b41de59cdbad022058b04b0358427279e77a0d954319ae2d502622da0846aae976f6bc8a2d3e20e701483045022100e1f2cea05a4b0765a699479cb318e3e55c0869b958cec7e996b4681eaf15636b02203bc39a7962f8dd8757a68314c0b1ef73bf759909c8f6ce9f185fd72ba80a9b1e014cf15521023ac710e73e1410718530b2686ce47f12fa3c470a9eb6085976b70b01c64c9f732102c9dc4d8f419e325bbef0fe039ed6feaf2079a2ef7b27336ddb79be2ea6e334bf2102eac939f2f0873894d8bf0ef2f8bbdd32e4290cbf9632b59dee743529c0af9e802103378b4a3854c88cca8bfed2558e9875a144521df4a75ab37a206049ccef12be692103495a81957ce65e3359c114e6c2fe9f97568be491e3f24d6fa66cc542e360cd662102d43e29299971e802160a92cfcd4037e8ae83fb8f6af138684bebdc5686f3b9db21031e415c04cbc9b81fbee6e04d8c902e8f61109a2c9883a959ba528c52698c055a57aeffffffffd73e1b4c68310591dd806c72b68d08ee33a2b94e4af5fa1f4def34eeca5dd03b00000000fd5e02004830450221009320b97c2b096f6e275be87581d2ac5a56d806090343fcc0dad8b79fd7ab2f8e02201b90e5de20d1b7e0318961cf63c8881c64419dc7ddf9ebd74723607d79d7cb0a0147304402207c5653966708be5cb09b7f25b64cb04ddf49aff0fc5fe8b1ce880e4a7737628b0220680a9bfec051c5609cabc084b674655d8c56b92eeff393dff9aef03c819740a2014730440220758f68f582b978e3bf2373b42eacf6b107b8e1a4b7f76698e2de40a9b4b7aefd022014f16f0ce881f3840cf6e56aa81a8a2605cdb0595460c728cf2ccb602860559f01483045022100bf3de270f469d19794c0a1e8acdd97d0970707a5993b2505ba37a026be40f27802202842ff94b3ecef1519b1f8e452699db1226536a0f79009473c60c11614f1892c01473044022043313ffc6338159d05f54cd1056d38d909e66041da734659b374e1785abd2da202200907e4f6693b1daa2e53023dcc3eeb7cec10f8f8cedfe967fbb57f46cb4dc64e014cf15521023ac710e73e1410718530b2686ce47f12fa3c470a9eb6085976b70b01c64c9f732102c9dc4d8f419e325bbef0fe039ed6feaf2079a2ef7b27336ddb79be2ea6e334bf2102eac939f2f0873894d8bf0ef2f8bbdd32e4290cbf9632b59dee743529c0af9e802103378b4a3854c88cca8bfed2558e9875a144521df4a75ab37a206049ccef12be692103495a81957ce65e3359c114e6c2fe9f97568be491e3f24d6fa66cc542e360cd662102d43e29299971e802160a92cfcd4037e8ae83fb8f6af138684bebdc5686f3b9db21031e415c04cbc9b81fbee6e04d8c902e8f61109a2c9883a959ba528c52698c055a57aeffffffff6ecf37ba30d81428edcb4aa8491669dd1e97e616a7372fb68ca8dd506d4576c600000000fd5f020047304402204664c3375345a4ffc31133216d3c18f6fe87d60456266cc9381519de77c86e8a02204e1425b055a446a7882da18779fe4c396740098afacbfb01d634aa257314fae001483045022100a8e80fd450a6a745c14b4669aae5e787e7b6e4912b52b0834928e7e4405045ad022011be3851de4dd862c4577fd47cecd794192f4be9883bdb24e7d77b536378141001473044022033bf6018473db85e2a8907a27723b0d380d66b806aef882261fcedee4c4028ca02204b349ac4beeb289e0a6d190eedba50ab2f1b732878442b4633c0e41d9d9d4ba901483045022100a4264359a19e0ce62280d5e80b50f3918b9bfc50eff0ca5333c2ff6f3e4755fd02203e700728e09a8e0e8e9902bfe3367ea72333a82fd694fdacf1e7bbe41b8bda9801483045022100d34c423528596adde73a2f5dbcd5b3d6901869ca4d1d733d101caf7732935c6e02204be6bd9d81c4aa792433ee745d5876352dda1e6156417e37f9a186f152e85065014cf15521023ac710e73e1410718530b2686ce47f12fa3c470a9eb6085976b70b01c64c9f732102c9dc4d8f419e325bbef0fe039ed6feaf2079a2ef7b27336ddb79be2ea6e334bf2102eac939f2f0873894d8bf0ef2f8bbdd32e4290cbf9632b59dee743529c0af9e802103378b4a3854c88cca8bfed2558e9875a144521df4a75ab37a206049ccef12be692103495a81957ce65e3359c114e6c2fe9f97568be491e3f24d6fa66cc542e360cd662102d43e29299971e802160a92cfcd4037e8ae83fb8f6af138684bebdc5686f3b9db21031e415c04cbc9b81fbee6e04d8c902e8f61109a2c9883a959ba528c52698c055a57aeffffffff7460750982051329d5341c4cb48d2da58219d297265d1d5f776b56be8b7c5dcc00000000fd5d0200473044022043947be65e77ff50c25cc229e8b4adf4d9b23083c54ca02a77555bcac8f8192d02201580b7a65ef573d2e676e2798d4da2382eca1c4038220bfc0e440a71fca7b6af01473044022062098b659a948e11a00d75690da4b7936eb882128cd44f3c2abd2ca5b5bf5dad02203e4affd63161329798827c8d6c6b8931cdd98d1775313f87934ba2d78a23499101473044022050bf79085810138622a2cf57c68f36210a372d6017cd4192915225dcbfab94510220066dd2ff02d9a0c990b077c0547e06f17bcca664110f73a7b93388bd3d3f7962014730440220209559ef71422cac58eb314c38ead7c4ff8c6a564068e718d5b2b8471fe71ce70220346d173ba7f5565824ac87d2e487e96a1caf92b42737a432d54285db1fc79aaf01483045022100cacd6b1b972b5c4318e9d945e41af20fc45a5cfb0676fc1d630d21027d23fcbe02207eab49d626ee641b44c11fde959110b0e03548053d1477b4f5d34b03ac79ab9e014cf15521023ac710e73e1410718530b2686ce47f12fa3c470a9eb6085976b70b01c64c9f732102c9dc4d8f419e325bbef0fe039ed6feaf2079a2ef7b27336ddb79be2ea6e334bf2102eac939f2f0873894d8bf0ef2f8bbdd32e4290cbf9632b59dee743529c0af9e802103378b4a3854c88cca8bfed2558e9875a144521df4a75ab37a206049ccef12be692103495a81957ce65e3359c114e6c2fe9f97568be491e3f24d6fa66cc542e360cd662102d43e29299971e802160a92cfcd4037e8ae83fb8f6af138684bebdc5686f3b9db21031e415c04cbc9b81fbee6e04d8c902e8f61109a2c9883a959ba528c52698c055a57aeffffffff02ea090000000000001976a91428d2e8cee08857f569e5a1b147c5d5e87339e08188acb40400000000000017a91487a9652e9b396545598c0fc72cb5a98848bf93d38700000000"
-	mtx := wire.NewMsgTx(wire.TxVersion)
-	txb, _ := hex.DecodeString(str)
-
-	mtx.BtcDecode(bytes.NewBuffer(txb), wire.ProtocolVersion, wire.LatestEncoding)
-	fmt.Println("length is", len(mtx.TxIn), mtx.TxHash().String())
-	for _, i := range mtx.TxIn {
-		fmt.Println(i.PreviousOutPoint.String())
+	for i := 0; i < 2; i++ {
+		LOOP:
+		for j := 0; j < 10; j++ {
+			if j == 2 {
+				continue LOOP
+			}
+			fmt.Println(i, j)
+		}
 	}
-
-	for _, o := range mtx.TxOut {
-		fmt.Printf("out: %d\n", o.Value)
-	}
-
-	s1, _ := txscript.DisasmString(mtx.TxIn[0].SignatureScript)
-	s2, _ := txscript.DisasmString(mtx.TxIn[1].SignatureScript)
-	fmt.Println(s1)
-	fmt.Println(s2)
-	fmt.Printf("%x\n%x\n", mtx.TxIn[0].SignatureScript, mtx.TxIn[1].SignatureScript)
-	fmt.Println(mtx.TxIn[0].SerializeSize(), mtx.TxIn[1].SerializeSize(), len(mtx.TxIn[0].SignatureScript), len(mtx.TxIn[1].SignatureScript), len(mtx.TxIn[2].SignatureScript), len(mtx.TxIn[3].SignatureScript))
-
-	var regTestGenesisHash = chainhash.Hash([chainhash.HashSize]byte{ // Make go vet happy.
-		0x06, 0x22, 0x6e, 0x46, 0x11, 0x1a, 0x0b, 0x59,
-		0xca, 0xaf, 0x12, 0x60, 0x43, 0xeb, 0x5b, 0xbf,
-		0x28, 0xc3, 0x4f, 0x3a, 0x5e, 0x33, 0x2a, 0x1f,
-		0xc7, 0xb2, 0xb7, 0x3c, 0xf1, 0x88, 0x91, 0x0f,
-	})
-
-	fmt.Println(regTestGenesisHash.String())
 }

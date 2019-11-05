@@ -23,17 +23,12 @@ type BtcRelayer struct {
 	relaying   chan *observer.CrossChainItem
 	Collecting chan *observer.FromAllianceItem
 	allia      *sdk.MultiChainSdk
-	config     *BtcConfig
+	config     *RelayerConfig
 	cli        *observer.RestCli
 	retryDB    *db.RetryDB
 }
 
-func NewBtcRelayer(confFile string) (*BtcRelayer, error) {
-	conf, err := NewBtcConfig(confFile)
-	if err != nil {
-		return nil, err
-	}
-
+func NewBtcRelayer(conf *RelayerConfig) (*BtcRelayer, error) {
 	var param *chaincfg.Params
 	switch conf.NetType {
 	case "test":
@@ -173,7 +168,7 @@ func (relayer *BtcRelayer) Print() {
 	}
 }
 
-type BtcConfig struct {
+type RelayerConfig struct {
 	BtcJsonRpcAddress      string
 	User                   string
 	Pwd                    string
@@ -192,10 +187,12 @@ type BtcConfig struct {
 	RetryDuration          int
 	RetryTimes             int
 	RetryDBPath            string
+	LogLevel int
+	LogPath string
 }
 
-func NewBtcConfig(file string) (*BtcConfig, error) {
-	conf := &BtcConfig{}
+func NewRelayerConfig(file string) (*RelayerConfig, error) {
+	conf := &RelayerConfig{}
 	err := conf.Init(file)
 	if err != nil {
 		return conf, fmt.Errorf("failed to new config: %v", err)
@@ -203,7 +200,7 @@ func NewBtcConfig(file string) (*BtcConfig, error) {
 	return conf, nil
 }
 
-func (this *BtcConfig) Init(fileName string) error {
+func (this *RelayerConfig) Init(fileName string) error {
 	err := this.loadConfig(fileName)
 	if err != nil {
 		return fmt.Errorf("loadConfig error:%s", err)
@@ -211,7 +208,7 @@ func (this *BtcConfig) Init(fileName string) error {
 	return nil
 }
 
-func (this *BtcConfig) loadConfig(fileName string) error {
+func (this *RelayerConfig) loadConfig(fileName string) error {
 	data, err := this.readFile(fileName)
 	if err != nil {
 		return err
@@ -223,7 +220,7 @@ func (this *BtcConfig) loadConfig(fileName string) error {
 	return nil
 }
 
-func (this *BtcConfig) readFile(fileName string) ([]byte, error) {
+func (this *RelayerConfig) readFile(fileName string) ([]byte, error) {
 	file, err := os.OpenFile(fileName, os.O_RDONLY, 0666)
 	if err != nil {
 		return nil, fmt.Errorf("OpenFile %s error %s", fileName, err)
