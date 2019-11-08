@@ -32,124 +32,74 @@ func NewBtcObserver(addr, user, pwd string, param *chaincfg.Params, conf *BtcObC
 }
 
 func (observer *BtcObserver) Listen(relaying chan *CrossChainItem) {
-START:
-	top, hash, err := observer.cli.GetCurrentHeightAndHash()
-	if err != nil {
-		log.Errorf("[BtcObserver] retry per 30 sec: %v", err)
-		time.Sleep(time.Second * 30)
-		goto START
-	}
+	top := btcCheckPoints[observer.NetParam.Name].Height
+	log.Infof("[BtcObserver] get start height %d from checkpoint, check once %d seconds", top, observer.conf.LoopWaitTime)
 
-	// first to start, check FirstN blocks from top
-	log.Infof("[BtcObserver] first to start Listen(), check %d blocks from top %d", observer.conf.FirstN, top)
-	num := observer.conf.FirstN
-	if num > top {
-		num = top
-	}
-	h := top
-	cnt := 0
-	for num > 0 {
-		txns, prev, err := observer.cli.GetTxsInBlock(hash)
-		if err != nil {
-			log.Errorf("[BtcObserver] failed to check block %s: %v", hash, err)
-			time.Sleep(time.Second * 10)
-			continue
-		}
-		count, err := observer.SearchTxInBlock(txns, h, relaying)
-		if err != nil {
-			log.Errorf("[BtcObserver] failed to search in block %s, retry after 10 sec: %v", hash, err)
-			time.Sleep(time.Second * 10)
-			continue
-		}
-		if count > 0 {
-			log.Infof("[BtcObserver] %d tx found in block(height:%d) %s", count, h, hash)
-		}
-
-		cnt += count
-		num--
-		h--
-		hash = prev
-	}
-	log.Infof("[BtcObserver] %d tx found from top(height:%d) to block %d", cnt, top, h)
-
-	log.Infof("[BtcObserver] next, check once %d seconds", observer.conf.LoopWaitTime)
+	tick := time.NewTicker(time.Duration(observer.conf.LoopWaitTime) * time.Second)
 	for {
-		time.Sleep(time.Duration(observer.conf.LoopWaitTime) * time.Second)
-		newTop, hash, err := observer.cli.GetCurrentHeightAndHash()
-		if err != nil {
-			log.Errorf("[BtcObserver] GetCurrentHeightAndHash failed, loop continue: %v", err)
-			continue
-		}
-		log.Tracef("[BtcObserver] start observing from block %s at height %d", hash, newTop)
-
-		num := newTop - top
-		if num <= observer.conf.Confirmations-1 { // Prevent rollback
-			log.Infof("[BtcObserver] height not enough: now is %d, prev is %d", newTop, top)
-			continue
-		}
-		h := newTop
-		for num+observer.conf.Confirmations > 0 {
-			txns, prev, err := observer.cli.GetTxsInBlock(hash)
+		select {
+		case <-tick.C:
+			newTop, hash, err := observer.cli.GetCurrentHeightAndHash()
 			if err != nil {
-				log.Errorf("[BtcObserver] failed to check block %s, retry after 10 sec: %v", hash, err)
-				time.Sleep(time.Second * 10)
+				log.Errorf("[BtcObserver] GetCurrentHeightAndHash failed, loop continue: %v", err)
 				continue
 			}
+			log.Tracef("[BtcObserver] start observing from block %s at height %d", hash, newTop)
 
-			count, err := observer.SearchTxInBlock(txns, h, relaying)
-			if err != nil {
-				log.Errorf("[BtcObserver] failed to search in block %s, retry after 10 sec: %v", hash, err)
-				time.Sleep(time.Second * 10)
+			if newTop <= top { // Prevent rollback
+				log.Tracef("[BtcObserver] height not enough: now is %d, prev is %d", newTop, top)
 				continue
 			}
-
-			if count > 0 {
-				log.Infof("[BtcObserver] %d tx found in block(height:%d) %s", count, h, hash)
+			for h := top - observer.conf.Confirmations + 2; h <= newTop - observer.conf.Confirmations + 1; h++ { // TODO: double check?
+				txns, hash, err := observer.cli.GetTxsInBlockByHeight(h)
+				if err != nil {
+					log.Errorf("[BtcObserver] failed to check block %s, retry after 10 sec: %v", hash, err)
+					h--
+					time.Sleep(time.Second * 10)
+					continue
+				}
+				count := observer.SearchTxInBlock(txns, h, relaying)
+				if count > 0 {
+					log.Infof("[BtcObserver] %d tx found in block(height:%d) %s", count, h, hash)
+				}
 			}
-			num--
-			h--
-			hash = prev
-		}
 
-		top = newTop
+			top = newTop
+		}
 	}
 }
 
-func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height uint32, relaying chan *CrossChainItem) (int, error) {
+func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height uint32, relaying chan *CrossChainItem) int {
 	count := 0
-	for _, tx := range txns {
-		if !checkIfCrossChainTx(tx, observer.NetParam) {
+	for i := 0; i < len(txns); i++ {
+		if !checkIfCrossChainTx(txns[i], observer.NetParam) {
 			continue
 		}
 		var buf bytes.Buffer
-		err := tx.BtcEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+		err := txns[i].BtcEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
 		if err != nil {
 			log.Errorf("[SearchTxInBlock] failed to encode transaction: %v", err)
 			continue
 		}
-
-		proof, err := observer.cli.GetProof([]string{tx.TxHash().String()})
+		txid := txns[i].TxHash()
+		proof, err := observer.cli.GetProof([]string{txid.String()}) // TODO: continue 的处理, 区分网络问题和get不存在问题
 		if err != nil {
-			log.Errorf("[SearchTxInBlock] failed to get proof for tx %s", tx.TxHash().String())
+			log.Errorf("[SearchTxInBlock] failed to get proof for tx %s", txid.String())
+			i--
 			continue
 		}
-		proofBytes, err := hex.DecodeString(proof)
-		if err != nil {
-			log.Errorf("[SearchTxInBlock] failed to decode proof in hex: %v", err)
-			continue
-		}
-
+		proofBytes, _ := hex.DecodeString(proof)
 		relaying <- &CrossChainItem{
 			Proof:  proofBytes,
 			Tx:     buf.Bytes(),
 			Height: height,
-			Txid:   tx.TxHash(),
+			Txid:   txid,
 		}
-		log.Infof("[SearchTxInBlock] eligible transaction found, txid: %s", tx.TxHash().String())
+		log.Infof("[SearchTxInBlock] eligible transaction found, txid: %s", txid.String())
 		count++
 	}
 
-	return count, nil
+	return count
 }
 
 type AllianceObConfig struct {
@@ -191,7 +141,7 @@ START:
 		if err != nil {
 			log.Errorf("[AllianceObserver] GetSmartContractEventByBlock failed, retry after 10 sec: %v", err)
 			time.Sleep(time.Second * 10)
-			continue
+			continue //TODO:
 		}
 
 		for _, e := range events {
@@ -252,10 +202,7 @@ START:
 					}
 					name, ok := states[0].(string)
 					if ok && name == observer.conf.WatchingKey {
-						tx, ok := states[1].(string)
-						if !ok {
-							continue
-						}
+						tx := states[1].(string)
 						collecting <- &FromAllianceItem{
 							Tx: tx,
 						}

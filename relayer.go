@@ -30,7 +30,7 @@ type BtcRelayer struct {
 
 func NewBtcRelayer(conf *RelayerConfig) (*BtcRelayer, error) {
 	var param *chaincfg.Params
-	switch conf.NetType {
+	switch conf.NetType { //TODO: ONT 以太增加网络切换
 	case "test":
 		param = &chaincfg.TestNet3Params
 	case "sim":
@@ -101,7 +101,7 @@ func (relayer *BtcRelayer) ReBroadcast() {
 				txb, _ := hex.DecodeString(s)
 				mtx := wire.NewMsgTx(wire.TxVersion)
 				mtx.BtcDecode(bytes.NewBuffer(txb), wire.ProtocolVersion, wire.LatestEncoding)
-				txid, err := relayer.cli.BroadcastTx(s)
+				txid, err := relayer.cli.BroadcastTx(s) // TODO: timeout 怎么处理
 				if err != nil {
 					switch err.(type) {
 					case observer.NeedToRetryErr:
@@ -153,7 +153,7 @@ func (relayer *BtcRelayer) Relay() {
 			item.Proof, relayer.account.Address[:], relayer.account)
 		if err != nil {
 			log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
-			continue
+			continue //TODO: 是否重试？网络问题需重试
 		}
 		log.Infof("[BtcRelayer] %s sent to alliance : txid: %s, height: %d", txHash.ToHexString(),
 			item.Txid, item.Height)
@@ -176,9 +176,9 @@ type RelayerConfig struct {
 	NetType                string
 	GasPrice               uint64
 	GasLimit               uint64
-	WalletFile             string
-	WalletPwd              string
-	BtcObFirstN            uint32 // BtcOb:
+	WalletFile             string // TODO：config 对象分层
+	WalletPwd              string //TODO: 输入密码
+	BtcObFirstN            uint32
 	BtcObLoopWaitTime      int64
 	BtcObConfirmations     uint32
 	AlliaObFirstN          uint32 // AlliaOb:

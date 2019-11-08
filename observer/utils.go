@@ -45,7 +45,7 @@ func checkIfCrossChainTx(tx *wire.MsgTx, netParam *chaincfg.Params) bool {
 	}
 
 	redeem, _ := hex.DecodeString(REDEEM_SCRIPT_HEX)
-	c1 := txscript.GetScriptClass(tx.TxOut[0].PkScript)
+	c1 := txscript.GetScriptClass(tx.TxOut[0].PkScript) // TODO: 写一种类型即可
 	if c1 == txscript.MultiSigTy {
 		if !bytes.Equal(redeem, tx.TxOut[0].PkScript) {
 			return false
@@ -64,11 +64,6 @@ func checkIfCrossChainTx(tx *wire.MsgTx, netParam *chaincfg.Params) bool {
 	if c2 != txscript.NullDataTy {
 		return false
 	}
-
-	//if int(tx.TxOut[1].PkScript[1]) != btc.OP_RETURN_DATA_LEN {
-	//	return false
-	//}
-
 	if tx.TxOut[1].PkScript[2] != btc.OP_RETURN_SCRIPT_FLAG {
 		return false
 	}
@@ -188,6 +183,33 @@ func (cli *RestCli) GetTxsInBlock(hash string) ([]*wire.MsgTx, string, error) {
 	}
 
 	return block.Transactions, block.Header.PrevBlock.String(), nil
+}
+
+func (cli *RestCli) GetTxsInBlockByHeight(height uint32) ([]*wire.MsgTx, string, error) {
+	req, err := json.Marshal(Request{
+		Jsonrpc: "1.0",
+		Method:  "getblockhash",
+		Params:  []interface{}{height},
+		Id:      1,
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to marshal request: %v", err)
+	}
+
+	resp, err := cli.sendPostReq(req)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to send post: %v", err)
+	}
+	if resp.Error != nil {
+		return nil, "", fmt.Errorf("response shows failure: %v", resp.Error.Message)
+	}
+	hash := resp.Result.(string)
+	txns, _, err:=  cli.GetTxsInBlock(hash)
+	if err != nil {
+		return nil, "", fmt.Errorf("fail to invoke GetTxsInBlock")
+	}
+
+	return txns, hash, nil
 }
 
 func (cli *RestCli) GetCurrentHeightAndHash() (uint32, string, error) {
