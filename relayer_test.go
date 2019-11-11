@@ -89,7 +89,7 @@ func TestBtcRelayer_AllianceListen(t *testing.T) {
 	log.InitLog(log.InfoLog, log.PATH, log.Stdout)
 	go r.AllianceListen()
 	go func() {
-		for item := range r.Collecting {
+		for item := range r.collecting {
 			fmt.Printf("Item tx: %s\n", item.Tx)
 		}
 	}()
@@ -114,13 +114,9 @@ func TestBtcRelayer_ReBroadcast(t *testing.T) {
 }
 
 func TestS(t *testing.T) {
-	for i := 0; i < 2; i++ {
-	LOOP:
-		for j := 0; j < 10; j++ {
-			if j == 2 {
-				continue LOOP
-			}
-			fmt.Println(i, j)
-		}
+	arr := []int{1, 2, 3}
+	for _, val := range arr {
+		fmt.Println(val)
+		<-time.Tick(3 * time.Second)
 	}
 }

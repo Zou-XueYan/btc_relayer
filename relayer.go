@@ -91,7 +91,7 @@ func (relayer *BtcRelayer) ReBroadcast() {
 					case observer.NetErr:
 						i--
 						log.Errorf("[BtcRelayer] net err happened, rebroadcast %s failed: %v", mtx.TxHash().String(), err)
-						time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
+						<-time.Tick(time.Second * observer.SleepTime)
 					default:
 						log.Infof("[BtcRelayer] no need to rebroadcast and delete this tx %s...%s: %v", txArr[i][:16],
 							txArr[i][len(txArr[i])-16:], err)
@@ -128,7 +128,7 @@ func (relayer *BtcRelayer) Broadcast() {
 				relayer.collecting <- item
 				log.Errorf("[BtcRelayer] net err happened, put it(%s...%s) back to channel: %v", item.Tx[:16],
 					item.Tx[len(item.Tx)-16:], err)
-				time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
+				<-time.Tick(time.Second * observer.SleepTime)
 			default:
 				log.Errorf("[BtcRelayer] failed to broadcast tx: %v", err)
 			}
@@ -148,7 +148,7 @@ func (relayer *BtcRelayer) Relay() {
 			case client.PostErr:
 				log.Errorf("[BtcRelayer] failed to relay and post err: %v", err)
 				relayer.relaying <- item
-				time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
+				<-time.Tick(time.Second * observer.SleepTime)
 			default:
 				log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
 			}
@@ -167,6 +167,7 @@ type RelayerConfig struct {
 	RetryDBPath   string                     `json:"retry_db_path"`
 	LogLevel      int                        `json:"log_level"`
 	LogPath       string                     `json:"log_path"`
+	SleepTime     int                        `json:"sleep_time"`
 }
 
 func NewRelayerConfig(file string) (*RelayerConfig, error) {

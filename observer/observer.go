@@ -17,7 +17,6 @@ type BtcObConfig struct {
 	BtcJsonRpcAddress  string `json:"btc_json_rpc_address"`
 	User               string `json:"user"`
 	Pwd                string `json:"pwd"`
-	SleepTime int `json:"sleep_time"`
 }
 
 type BtcObserver struct {
@@ -70,7 +69,7 @@ func (observer *BtcObserver) Listen(relaying chan *CrossChainItem) {
 				if err != nil {
 					log.Errorf("[BtcObserver] failed to check block %s, retry after 10 sec: %v", hash, err)
 					h--
-					time.Sleep(time.Second * time.Duration(observer.conf.SleepTime))
+					<-time.Tick(time.Second * SleepTime)
 					continue
 				}
 				count := observer.SearchTxInBlock(txns, h, relaying)
@@ -103,7 +102,7 @@ func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height uint32, 
 			case NetErr:
 				log.Errorf("[SearchTxInBlock] post err when try to get proof for tx %s: %v", txid.String(), err)
 				i--
-				time.Sleep(time.Second * time.Duration(observer.conf.SleepTime))
+				<-time.Tick(time.Second * SleepTime)
 			default:
 				log.Errorf("[SearchTxInBlock] failed to get proof for tx %s: %v", txid.String(), err)
 			}
@@ -129,7 +128,6 @@ type AllianceObConfig struct {
 	AllianceJsonRpcAddress string `json:"alliance_json_rpc_address"`
 	WalletFile             string `json:"wallet_file"`
 	WalletPwd              string `json:"wallet_pwd"`
-	SleepTime int `json:"sleep_time"`
 }
 
 type AllianceObserver struct {
@@ -169,7 +167,7 @@ func (observer *AllianceObserver) Listen(collecting chan *FromAllianceItem) {
 				events, err := observer.allia.GetSmartContractEventByBlock(h)
 				if err != nil {
 					log.Errorf("[AllianceObserver] GetSmartContractEventByBlock failed, retry after 10 sec: %v", err)
-					time.Sleep(time.Second * time.Duration(observer.conf.SleepTime))
+					<-time.Tick(time.Second * SleepTime)
 					continue
 				}
 

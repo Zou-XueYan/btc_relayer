@@ -25,6 +25,10 @@ const (
 	BTC_ID            uint64 = 0
 )
 
+var (
+	SleepTime time.Duration = 10
+)
+
 type CrossChainItem struct {
 	Tx     []byte
 	Proof  []byte
