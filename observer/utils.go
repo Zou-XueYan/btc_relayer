@@ -45,12 +45,8 @@ func checkIfCrossChainTx(tx *wire.MsgTx, netParam *chaincfg.Params) bool {
 	}
 
 	redeem, _ := hex.DecodeString(REDEEM_SCRIPT_HEX)
-	c1 := txscript.GetScriptClass(tx.TxOut[0].PkScript) // TODO: 写一种类型即可
-	if c1 == txscript.MultiSigTy {
-		if !bytes.Equal(redeem, tx.TxOut[0].PkScript) {
-			return false
-		}
-	} else if c1 == txscript.ScriptHashTy {
+	c1 := txscript.GetScriptClass(tx.TxOut[0].PkScript)
+	if c1 == txscript.ScriptHashTy {
 		addr, _ := btcutil.NewAddressScriptHash(redeem, netParam)
 		h, _ := txscript.PayToAddrScript(addr)
 		if !bytes.Equal(h, tx.TxOut[0].PkScript) {
@@ -114,7 +110,7 @@ func (cli *RestCli) sendPostReq(req []byte) (*Response, error) {
 	resp, err := cli.Cli.Post(cli.Addr, "application/json;charset=UTF-8",
 		bytes.NewReader(req))
 	if err != nil {
-		return nil, fmt.Errorf("failed to post: %v", err)
+		return nil, NetErr{fmt.Errorf("failed to post: %v", err)}
 	}
 	defer resp.Body.Close()
 	body, err := ioutil.ReadAll(resp.Body)
@@ -204,7 +200,7 @@ func (cli *RestCli) GetTxsInBlockByHeight(height uint32) ([]*wire.MsgTx, string,
 		return nil, "", fmt.Errorf("response shows failure: %v", resp.Error.Message)
 	}
 	hash := resp.Result.(string)
-	txns, _, err:=  cli.GetTxsInBlock(hash)
+	txns, _, err := cli.GetTxsInBlock(hash)
 	if err != nil {
 		return nil, "", fmt.Errorf("fail to invoke GetTxsInBlock")
 	}
@@ -299,5 +295,13 @@ func (err NeedToRetryErr) Error() string {
 }
 
 func (err *NeedToRetryErr) String() string {
+	return err.Err.Error()
+}
+
+type NetErr struct {
+	Err error
+}
+
+func (err NetErr) Error() string {
 	return err.Err.Error()
 }

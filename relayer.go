@@ -5,12 +5,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
 	"github.com/ontio/btcrelayer/db"
 	"github.com/ontio/btcrelayer/log"
 	"github.com/ontio/btcrelayer/observer"
 	sdk "github.com/ontio/multi-chain-go-sdk"
+	"github.com/ontio/multi-chain-go-sdk/client"
+	"github.com/ontio/multi-chain/common/password"
 	"io/ioutil"
 	"os"
 	"time"
@@ -21,7 +22,7 @@ type BtcRelayer struct {
 	alliaOb    *observer.AllianceObserver
 	account    *sdk.Account
 	relaying   chan *observer.CrossChainItem
-	Collecting chan *observer.FromAllianceItem
+	collecting chan *observer.FromAllianceItem
 	allia      *sdk.MultiChainSdk
 	config     *RelayerConfig
 	cli        *observer.RestCli
@@ -29,21 +30,9 @@ type BtcRelayer struct {
 }
 
 func NewBtcRelayer(conf *RelayerConfig) (*BtcRelayer, error) {
-	var param *chaincfg.Params
-	switch conf.NetType { //TODO: ONT 以太增加网络切换
-	case "test":
-		param = &chaincfg.TestNet3Params
-	case "sim":
-		param = &chaincfg.SimNetParams
-	case "regtest":
-		param = &chaincfg.RegressionNetParams
-	default:
-		param = &chaincfg.MainNetParams
-	}
-
 	allia := sdk.NewMultiChainSdk()
-	allia.NewRpcClient().SetAddress(conf.AllianceJsonRpcAddress)
-	acct, err := GetAccountByPassword(allia, conf.WalletFile, conf.WalletPwd)
+	allia.NewRpcClient().SetAddress(conf.AlliaObConf.AllianceJsonRpcAddress)
+	acct, err := GetAccountByPassword(allia, conf.AlliaObConf.WalletFile, conf.AlliaObConf.WalletPwd)
 	if err != nil {
 		return nil, fmt.Errorf("GetAccountByPassword failed: %v", err)
 	}
@@ -57,23 +46,16 @@ func NewBtcRelayer(conf *RelayerConfig) (*BtcRelayer, error) {
 		return nil, fmt.Errorf("failed to new retry db: %v", err)
 	}
 
+	cli := observer.NewRestCli(conf.BtcObConf.BtcJsonRpcAddress, conf.BtcObConf.User, conf.BtcObConf.Pwd)
 	return &BtcRelayer{
-		btcOb: observer.NewBtcObserver(conf.BtcJsonRpcAddress, conf.User, conf.Pwd, param, &observer.BtcObConfig{
-			FirstN:        conf.BtcObFirstN,
-			LoopWaitTime:  conf.BtcObLoopWaitTime,
-			Confirmations: conf.BtcObConfirmations,
-		}),
-		alliaOb: observer.NewAllianceObserver(allia, &observer.AllianceObConfig{
-			FirstN:       conf.AlliaObFirstN,
-			LoopWaitTime: conf.AlliaObLoopWaitTime,
-			WatchingKey:  conf.WatchingKey,
-		}),
+		btcOb:      observer.NewBtcObserver(conf.BtcObConf, cli),
+		alliaOb:    observer.NewAllianceObserver(allia, conf.AlliaObConf),
 		account:    acct,
 		relaying:   make(chan *observer.CrossChainItem, 10),
-		Collecting: make(chan *observer.FromAllianceItem, 10),
+		collecting: make(chan *observer.FromAllianceItem, 10),
 		allia:      allia,
 		config:     conf,
-		cli:        observer.NewRestCli(conf.BtcJsonRpcAddress, conf.User, conf.Pwd),
+		cli:        cli,
 		retryDB:    rdb,
 	}, nil
 }
@@ -83,7 +65,7 @@ func (relayer *BtcRelayer) BtcListen() {
 }
 
 func (relayer *BtcRelayer) AllianceListen() {
-	relayer.alliaOb.Listen(relayer.Collecting)
+	relayer.alliaOb.Listen(relayer.collecting)
 }
 
 func (relayer *BtcRelayer) ReBroadcast() {
@@ -97,27 +79,32 @@ func (relayer *BtcRelayer) ReBroadcast() {
 				log.Debugf("[BtcRelayer] failed to get retry tx: %v", err)
 				continue
 			}
-			for _, s := range txArr {
-				txb, _ := hex.DecodeString(s)
+			for i := 0; i < len(txArr); i++ {
+				txb, _ := hex.DecodeString(txArr[i])
 				mtx := wire.NewMsgTx(wire.TxVersion)
 				mtx.BtcDecode(bytes.NewBuffer(txb), wire.ProtocolVersion, wire.LatestEncoding)
-				txid, err := relayer.cli.BroadcastTx(s) // TODO: timeout 怎么处理
+				txid, err := relayer.cli.BroadcastTx(txArr[i])
 				if err != nil {
 					switch err.(type) {
 					case observer.NeedToRetryErr:
-						log.Debugf("[BtcRelayer] rebroadcast %s failed: %v", mtx.TxHash().String(), err)
+						log.Errorf("[BtcRelayer] rebroadcast %s failed: %v", mtx.TxHash().String(), err)
+					case observer.NetErr:
+						i--
+						log.Errorf("[BtcRelayer] net err happened, rebroadcast %s failed: %v", mtx.TxHash().String(), err)
+						time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
 					default:
-						log.Infof("[BtcRelayer] no need to rebroadcast and delete this tx %s...%s: %v", s[:6], s[len(s)-6:], err)
-						err = relayer.retryDB.Del(s)
+						log.Infof("[BtcRelayer] no need to rebroadcast and delete this tx %s...%s: %v", txArr[i][:16],
+							txArr[i][len(txArr[i])-16:], err)
+						err = relayer.retryDB.Del(txArr[i])
 						if err != nil {
-							log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, s, err)
+							log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, txArr[i], err)
 						}
 					}
 				} else {
 					log.Infof("[BtcRelayer] rebroadcast and delete tx: %s", txid)
-					err = relayer.retryDB.Del(s)
+					err = relayer.retryDB.Del(txArr[i])
 					if err != nil {
-						log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, s, err)
+						log.Errorf("[BtcRelayer] failed to delete tx %s(%s): %v", txid, txArr[i], err)
 					}
 				}
 			}
@@ -127,16 +114,21 @@ func (relayer *BtcRelayer) ReBroadcast() {
 
 func (relayer *BtcRelayer) Broadcast() {
 	log.Infof("[BtcRelayer] start broadcasting")
-	for item := range relayer.Collecting {
+	for item := range relayer.collecting {
 		txid, err := relayer.cli.BroadcastTx(item.Tx)
 		if err != nil {
 			switch err.(type) {
 			case observer.NeedToRetryErr:
-				log.Infof("[BtcRelayer] need to rebroadcast this tx %s...%s: %v", item.Tx[:6], item.Tx[len(item.Tx)-6:], err)
+				log.Infof("[BtcRelayer] need to rebroadcast this tx %s...%s: %v", item.Tx[:16], item.Tx[len(item.Tx)-16:], err)
 				err = relayer.retryDB.Put(item.Tx)
 				if err != nil {
 					log.Errorf("[BtcRelayer] failed to put tx in db: %v", err)
 				}
+			case observer.NetErr:
+				relayer.collecting <- item
+				log.Errorf("[BtcRelayer] net err happened, put it(%s...%s) back to channel: %v", item.Tx[:16],
+					item.Tx[len(item.Tx)-16:], err)
+				time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
 			default:
 				log.Errorf("[BtcRelayer] failed to broadcast tx: %v", err)
 			}
@@ -152,43 +144,29 @@ func (relayer *BtcRelayer) Relay() {
 		txHash, err := relayer.allia.Native.Ccm.ImportOuterTransfer(observer.BTC_ID, item.Txid[:], item.Tx, uint32(item.Height),
 			item.Proof, relayer.account.Address[:], relayer.account)
 		if err != nil {
-			log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
-			continue //TODO: 是否重试？网络问题需重试
+			switch err.(type) {
+			case client.PostErr:
+				log.Errorf("[BtcRelayer] failed to relay and post err: %v", err)
+				relayer.relaying <- item
+				time.Sleep(time.Second * time.Duration(relayer.config.BtcObConf.SleepTime))
+			default:
+				log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
+			}
+			continue
 		}
 		log.Infof("[BtcRelayer] %s sent to alliance : txid: %s, height: %d", txHash.ToHexString(),
 			item.Txid, item.Height)
 	}
 }
 
-func (relayer *BtcRelayer) Print() {
-	for item := range relayer.relaying {
-		fmt.Printf("Item heigh: %d\t", item.Height)
-		fmt.Printf("Item proof: %s\t", item.Proof)
-		fmt.Printf("Item txid: %s\n", item.Txid)
-	}
-}
-
 type RelayerConfig struct {
-	BtcJsonRpcAddress      string
-	User                   string
-	Pwd                    string
-	AllianceJsonRpcAddress string
-	NetType                string
-	GasPrice               uint64
-	GasLimit               uint64
-	WalletFile             string // TODO：config 对象分层
-	WalletPwd              string //TODO: 输入密码
-	BtcObFirstN            uint32
-	BtcObLoopWaitTime      int64
-	BtcObConfirmations     uint32
-	AlliaObFirstN          uint32 // AlliaOb:
-	AlliaObLoopWaitTime    int64
-	WatchingKey            string
-	RetryDuration          int
-	RetryTimes             int
-	RetryDBPath            string
-	LogLevel int
-	LogPath string
+	BtcObConf     *observer.BtcObConfig      `json:"btc_ob_conf"`
+	AlliaObConf   *observer.AllianceObConfig `json:"allia_ob_conf"`
+	RetryDuration int                        `json:"retry_duration"`
+	RetryTimes    int                        `json:"retry_times"`
+	RetryDBPath   string                     `json:"retry_db_path"`
+	LogLevel      int                        `json:"log_level"`
+	LogPath       string                     `json:"log_path"`
 }
 
 func NewRelayerConfig(file string) (*RelayerConfig, error) {
@@ -243,11 +221,16 @@ func GetAccountByPassword(sdk *sdk.MultiChainSdk, path, pwd string) (*sdk.Accoun
 	if err != nil {
 		return nil, fmt.Errorf("open wallet error: %v", err)
 	}
-	//pwd, err := password.GetPassword()
-	//if err != nil {
-	//	return nil, fmt.Errorf("getPassword error: %v", err)
-	//}
-	user, err := wallet.GetDefaultAccount([]byte(pwd))
+	pwdb := []byte{}
+	if pwd == "" {
+		pwdb, err = password.GetPassword()
+		if err != nil {
+			return nil, fmt.Errorf("getPassword error: %v", err)
+		}
+	} else {
+		pwdb = []byte(pwd)
+	}
+	user, err := wallet.GetDefaultAccount(pwdb)
 	if err != nil {
 		return nil, fmt.Errorf("getDefaultAccount error: %v", err)
 	}

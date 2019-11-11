@@ -1,22 +1,24 @@
 {
-  "BtcJsonRpcAddress": "http://139.219.140.220:20332",
-  "User": "test",
-  "Pwd": "test",
-  "AllianceJsonRpcAddress": "http://172.168.3.73:40336",
-  "NetType": "test",
-  "GasPrice": 0,
-  "GasLimit": 200000,
-  "WalletFile": "./wallet.dat",
-  "WalletPwd": "passwordtest",
-  "BtcObFirstN": 50,
-  "BtcObLoopWaitTime": 300,
-  "BtcObConfirmations": 1,
-  "AlliaObFirstN": 1000,
-  "AlliaObLoopWaitTime": 10,
-  "WatchingKey": "btcTxToRelay",
-  "RetryDuration": 1,
-  "RetryTimes": 2,
-  "RetryDBPath": "./",
-  "LogLevel": 0,
-  "LogPath": ""
+  "btc_ob_conf": {
+    "net_type": "test",
+    "btc_ob_loop_wait_time": 300,
+    "btc_ob_confirmations": 1,
+    "btc_json_rpc_address": "http://139.219.140.220:20332",
+    "user": "test",
+    "pwd": "test",
+    "sleep_time": 10
+  },
+  "allia_ob_conf": {
+    "alliance_json_rpc_address": "http://172.168.3.73:40336",
+    "allia_ob_loop_wait_time": 10,
+    "watching_key": "btcTxToRelay",
+    "wallet_file": "./wallet.dat",
+    "wallet_pwd": "passwordtest",
+    "sleep_time": 10
+  },
+  "retry_duration": 1,
+  "retry_times": 2,
+  "retry_db_path": "./",
+  "log_level": 0,
+  "log_path": ""
 }

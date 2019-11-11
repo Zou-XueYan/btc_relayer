@@ -26,7 +26,7 @@ func TestNewRelayerConfig(t *testing.T) {
 		t.Fatalf("new btc config failed: %v", err)
 	}
 
-	fmt.Printf("config btc_addr: %s, nettype: %s\n", conf.BtcJsonRpcAddress, conf.NetType)
+	fmt.Printf("config btc_addr: %s, nettype: %s\n", conf.BtcObConf.BtcJsonRpcAddress, conf.AlliaObConf.AllianceJsonRpcAddress)
 }
 
 func TestNewBtcRelayer(t *testing.T) {
@@ -115,7 +115,7 @@ func TestBtcRelayer_ReBroadcast(t *testing.T) {
 
 func TestS(t *testing.T) {
 	for i := 0; i < 2; i++ {
-		LOOP:
+	LOOP:
 		for j := 0; j < 10; j++ {
 			if j == 2 {
 				continue LOOP

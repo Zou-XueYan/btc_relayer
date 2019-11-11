@@ -8,6 +8,9 @@ var btcCheckPoints map[string]*Checkpoint
 var alliaCheckPoints map[string]*Checkpoint
 
 func init() {
+	btcCheckPoints = make(map[string]*Checkpoint)
+	alliaCheckPoints = make(map[string]*Checkpoint)
+
 	btcCheckPoints["regtest"] = &Checkpoint{
 		Height: 5,
 	}
