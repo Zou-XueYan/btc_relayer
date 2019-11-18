@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/btcsuite/btcd/wire"
+	"github.com/ontio/btcrelayer/db"
 	"github.com/ontio/btcrelayer/log"
 	sdk "github.com/ontio/multi-chain-go-sdk"
 	"time"
@@ -17,15 +18,17 @@ type BtcObConfig struct {
 	BtcJsonRpcAddress  string `json:"btc_json_rpc_address"`
 	User               string `json:"user"`
 	Pwd                string `json:"pwd"`
+	WaitingCycle       uint32 `json:"waiting_cycle"`
 }
 
 type BtcObserver struct {
 	cli      *RestCli
 	NetParam *chaincfg.Params
 	conf     *BtcObConfig
+	retryDB  *db.RetryDB
 }
 
-func NewBtcObserver(conf *BtcObConfig, cli *RestCli) *BtcObserver {
+func NewBtcObserver(conf *BtcObConfig, cli *RestCli, rdb *db.RetryDB) *BtcObserver {
 	var param *chaincfg.Params
 	switch conf.NetType {
 	case "test":
@@ -41,12 +44,16 @@ func NewBtcObserver(conf *BtcObConfig, cli *RestCli) *BtcObserver {
 	observer.cli = cli
 	observer.NetParam = param
 	observer.conf = conf
+	observer.retryDB = rdb
 
 	return &observer
 }
 
 func (observer *BtcObserver) Listen(relaying chan *CrossChainItem) {
-	top := btcCheckPoints[observer.NetParam.Name].Height
+	top := observer.retryDB.GetBtcHeight()
+	if top < btcCheckPoints[observer.NetParam.Name].Height {
+		top = btcCheckPoints[observer.NetParam.Name].Height
+	}
 	log.Infof("[BtcObserver] get start height %d from checkpoint, check once %d seconds", top, observer.conf.BtcObLoopWaitTime)
 
 	tick := time.NewTicker(time.Duration(observer.conf.BtcObLoopWaitTime) * time.Second)
@@ -64,7 +71,8 @@ func (observer *BtcObserver) Listen(relaying chan *CrossChainItem) {
 				log.Tracef("[BtcObserver] height not enough: now is %d, prev is %d", newTop, top)
 				continue
 			}
-			for h := top - observer.conf.BtcObConfirmations + 2; h <= newTop-observer.conf.BtcObConfirmations + 1; h++ {
+			total := 0
+			for h := top - observer.conf.BtcObConfirmations + 2; h <= newTop-observer.conf.BtcObConfirmations+1; h++ {
 				txns, hash, err := observer.cli.GetTxsInBlockByHeight(h)
 				if err != nil {
 					log.Errorf("[BtcObserver] failed to check block %s, retry after 10 sec: %v", hash, err)
@@ -74,11 +82,19 @@ func (observer *BtcObserver) Listen(relaying chan *CrossChainItem) {
 				}
 				count := observer.SearchTxInBlock(txns, h, relaying)
 				if count > 0 {
+					total += count
 					log.Infof("[BtcObserver] %d tx found in block(height:%d) %s", count, h, hash)
 				}
 			}
 
 			top = newTop
+			if total > 0 || top%observer.conf.WaitingCycle == 0 {
+				err := observer.retryDB.SetBtcHeight(top)
+				log.Tracef("[BtcObserver] write btc height %d", top)
+				if err != nil {
+					log.Errorf("[BtcObserver] failed to set btc height: %v", err)
+				}
+			}
 		}
 	}
 }
@@ -109,7 +125,7 @@ func (observer *BtcObserver) SearchTxInBlock(txns []*wire.MsgTx, height uint32, 
 			continue
 		}
 		proofBytes, _ := hex.DecodeString(proof)
-		relaying <- &CrossChainItem {
+		relaying <- &CrossChainItem{
 			Proof:  proofBytes,
 			Tx:     buf.Bytes(),
 			Height: height,
@@ -128,22 +144,29 @@ type AllianceObConfig struct {
 	AllianceJsonRpcAddress string `json:"alliance_json_rpc_address"`
 	WalletFile             string `json:"wallet_file"`
 	WalletPwd              string `json:"wallet_pwd"`
+	NetType                string `json:"net_type"`
+	WaitingCycle           uint32 `json:"waiting_cycle"`
 }
 
 type AllianceObserver struct {
-	allia *sdk.MultiChainSdk
-	conf  *AllianceObConfig
+	allia   *sdk.MultiChainSdk
+	conf    *AllianceObConfig
+	retryDB *db.RetryDB
 }
 
-func NewAllianceObserver(allia *sdk.MultiChainSdk, conf *AllianceObConfig) *AllianceObserver {
+func NewAllianceObserver(allia *sdk.MultiChainSdk, conf *AllianceObConfig, rdb *db.RetryDB) *AllianceObserver {
 	return &AllianceObserver{
 		allia: allia,
 		conf:  conf,
+		retryDB: rdb,
 	}
 }
 
 func (observer *AllianceObserver) Listen(collecting chan *FromAllianceItem) {
-	top := alliaCheckPoints["testnet"].Height //temp
+	top := observer.retryDB.GetAlliaHeight()
+	if top < alliaCheckPoints[observer.conf.NetType].Height {
+		top = alliaCheckPoints[observer.conf.NetType].Height
+	}
 
 	log.Infof("[AllianceObserver] get start height %d from checkpoint, check once %d seconds", top, observer.conf.AlliaObLoopWaitTime)
 	tick := time.NewTicker(time.Duration(observer.conf.AlliaObLoopWaitTime) * time.Second)
@@ -180,7 +203,7 @@ func (observer *AllianceObserver) Listen(collecting chan *FromAllianceItem) {
 						name, ok := states[0].(string)
 						if ok && name == observer.conf.WatchingKey {
 							tx := states[1].(string)
-							collecting <- &FromAllianceItem {
+							collecting <- &FromAllianceItem{
 								Tx: tx,
 							}
 							count++
@@ -195,6 +218,13 @@ func (observer *AllianceObserver) Listen(collecting chan *FromAllianceItem) {
 				log.Infof("[AllianceObserver] total %d transactions captured this time", count)
 			}
 			top = newTop
+			if count > 0 || top%observer.conf.WaitingCycle == 0 {
+				err := observer.retryDB.SetBtcHeight(top)
+				log.Tracef("[AlliaObserver] write allia height %d", top)
+				if err != nil {
+					log.Errorf("[AllianceObserver] failed to set alliance height: %v", err)
+				}
+			}
 		}
 	}
 }

@@ -41,15 +41,15 @@ func NewBtcRelayer(conf *RelayerConfig) (*BtcRelayer, error) {
 		os.Mkdir(conf.RetryDBPath, os.ModePerm)
 	}
 
-	rdb, err := db.NewRetryDB(conf.RetryDBPath, conf.RetryTimes, conf.RetryDuration)
+	rdb, err := db.NewRetryDB(conf.RetryDBPath, conf.RetryTimes, conf.RetryDuration, conf.MaxReadSize)
 	if err != nil {
 		return nil, fmt.Errorf("failed to new retry db: %v", err)
 	}
 
 	cli := observer.NewRestCli(conf.BtcObConf.BtcJsonRpcAddress, conf.BtcObConf.User, conf.BtcObConf.Pwd)
 	return &BtcRelayer{
-		btcOb:      observer.NewBtcObserver(conf.BtcObConf, cli),
-		alliaOb:    observer.NewAllianceObserver(allia, conf.AlliaObConf),
+		btcOb:      observer.NewBtcObserver(conf.BtcObConf, cli, rdb),
+		alliaOb:    observer.NewAllianceObserver(allia, conf.AlliaObConf, rdb),
 		account:    acct,
 		relaying:   make(chan *observer.CrossChainItem, 10),
 		collecting: make(chan *observer.FromAllianceItem, 10),
@@ -147,7 +147,9 @@ func (relayer *BtcRelayer) Relay() {
 			switch err.(type) {
 			case client.PostErr:
 				log.Errorf("[BtcRelayer] failed to relay and post err: %v", err)
-				relayer.relaying <- item
+				go func() {
+					relayer.relaying <- item
+				}()
 				<-time.Tick(time.Second * observer.SleepTime)
 			default:
 				log.Errorf("[BtcRelayer] invokeNativeContract error: %v", err)
@@ -166,8 +168,8 @@ type RelayerConfig struct {
 	RetryTimes    int                        `json:"retry_times"`
 	RetryDBPath   string                     `json:"retry_db_path"`
 	LogLevel      int                        `json:"log_level"`
-	LogPath       string                     `json:"log_path"`
 	SleepTime     int                        `json:"sleep_time"`
+	MaxReadSize   uint64                     `json:"max_read_size"`
 }
 
 func NewRelayerConfig(file string) (*RelayerConfig, error) {

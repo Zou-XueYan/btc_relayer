@@ -23,7 +23,7 @@ func afterTest() {
 
 func TestNewRetryDB(t *testing.T) {
 	defer afterTest()
-	_, err := NewRetryDB("./", 5, 1)
+	_, err := NewRetryDB("./", 5, 1, 500)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,7 +31,7 @@ func TestNewRetryDB(t *testing.T) {
 
 func TestRetryDB_Put(t *testing.T) {
 	defer afterTest()
-	db, _ := NewRetryDB("./", 5, 1)
+	db, _ := NewRetryDB("./", 5, 1, 500)
 	err := db.Put(txArr[0])
 	if err != nil {
 		t.Fatal(err)
@@ -49,7 +49,7 @@ func TestRetryDB_Put(t *testing.T) {
 
 func TestRetryDB_GetAll(t *testing.T) {
 	defer afterTest()
-	db, _ := NewRetryDB("./", 2, 1)
+	db, _ := NewRetryDB("./", 5, 1, 500)
 	for _, tx := range txArr[:3] {
 		db.Put(tx)
 	}
@@ -88,7 +88,7 @@ func TestRetryDB_GetAll(t *testing.T) {
 
 func TestRetryDB_GetAll2(t *testing.T) {
 	defer afterTest()
-	db, _ := NewRetryDB("./", 0, 1)
+	db, _ := NewRetryDB("./", 5, 1, 500)
 	for _, tx := range txArr[:3] {
 		db.Put(tx)
 	}
@@ -110,4 +110,17 @@ func TestRetryDB_GetAll2(t *testing.T) {
 
 func TestRetryDB_Del(t *testing.T) {
 	defer afterTest()
+}
+
+func TestRetryDB_GetBtcHeight(t *testing.T) {
+	defer afterTest()
+	db, _ := NewRetryDB("./", 5, 1, 500)
+	h := db.GetBtcHeight()
+	if h != 0 {
+		t.Fatal("not equal")
+	}
+}
+
+func TestOverReadSizeErr_Error(t *testing.T) {
+
 }

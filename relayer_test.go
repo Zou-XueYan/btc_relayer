@@ -1,7 +1,17 @@
 package btc_relayer
 
 import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"github.com/btcsuite/btcd/btcec"
+	"github.com/btcsuite/btcd/chaincfg"
+	"github.com/btcsuite/btcd/chaincfg/chainhash"
+	"github.com/btcsuite/btcd/txscript"
+	"github.com/btcsuite/btcd/wire"
+	"github.com/btcsuite/btcutil"
+	"github.com/btcsuite/btcutil/base58"
 	"github.com/ontio/btcrelayer/log"
 	"os"
 	"testing"
@@ -58,28 +68,6 @@ func TestBtcRelayer_BtcListen(t *testing.T) {
 	time.Sleep(time.Second * 60)
 }
 
-//func TestBtcRelayer_Relay(t *testing.T) {
-//	r, err := NewBtcRelayer("./conf.json")
-//	if err != nil {
-//		t.Fatalf("Failed to new relayer: %v", err)
-//	}
-//	log.InitLog(log.InfoLog, log.PATH, log.Stdout)
-//
-//	go func() {
-//		test := &observer.CrossChainItem{
-//			Proof:  "000000204149a82a4db84c25eabdd220ae55e568f3332f9a9d6bcc21be8d010000000000f783cb176b1c29fcb191eeb7299a105fc5db9a42be7cec34d08b8d819bb64fe44d1c495d71a5021a2ad64e1e26000000077702820166697756300bb36b2268ff36d93bbe63d09d42b42c7eb52a06aa9153320007b74b0935cbd73dd85deb23a2cc2268514e72d3795b563db1f77f8503aac3690bf489db8b0f3630a0f50a6767790c6f178d1027385f14d7e70ce2622a4a125da8708c3ddfb554fd8a636152007ca6f7ad7251c2514a07ea19a3718fb6b464259f0e6b7b06e34ae8f6c2e54d4d10c603cda1d2c1ebaf093c074e5b51e3a131b237e55e259bf74174441256a61f9d62d250d06ddcec3f6f94a3f6f43e3e3e59a4fc0e7c7dc59b926c2de2f4e9176ffbf7545e17b763cdc962d829500c321002bf00",
-//			Tx:     "0100000001ba32eb944a29e6c0d26189cc0cc67c5bd34d48ba876de114255bb6e3284ea7d1000000006a473044022040f94d2f640377d28f6aa0176477d0924c13a4772d1344c824ed69aac0d8c48b02200f9d475ff9f877a37b7d3e418f9cca6c0cb1909d3aa16361fd256c7aa05f80e9012103128a2c4525179e47f38cf3fefca37a61548ca4610255b3fb4ee86de2d3e80c0fffffffff0300350c000000000017a91487a9652e9b396545598c0fc72cb5a98848bf93d38700000000000000002c6a2a66000000000000000200000000000003e81727e090b158ee5c69c7e46076a996c4bd6159286ef9621225a0860100000000001976a91428d2e8cee08857f569e5a1b147c5d5e87339e08188ac00000000",
-//			Height: 1572760,
-//			Txid:   "aa03857ff7b13d565b79d3724e516822cca223eb5dd83dd7cb35094bb7070032",
-//		}
-//		time.Sleep(time.Second * 5)
-//		r.relaying <- test
-//	}()
-//	go r.Relay()
-//
-//	time.Sleep(time.Second * 30)
-//}
-
 func TestBtcRelayer_AllianceListen(t *testing.T) {
 	conf, _ := NewRelayerConfig("./conf.json")
 	r, err := NewBtcRelayer(conf)
@@ -113,10 +101,125 @@ func TestBtcRelayer_ReBroadcast(t *testing.T) {
 	time.Sleep(3 * time.Minute)
 }
 
-func TestS(t *testing.T) {
-	arr := []int{1, 2, 3}
-	for _, val := range arr {
-		fmt.Println(val)
-		<-time.Tick(3 * time.Second)
+func getPrivks() []*btcec.PrivateKey {
+	arr := []string {
+		"cTqbqa1YqCf4BaQTwYDGsPAB4VmWKUU67G5S1EtrHSWNRwY6QSag",
+		"cT2HP4QvL8c6otn4LrzUWzgMBfTo1gzV2aobN1cTiuHPXH9Jk2ua",
+		"cSQmGg6spbhd23jHQ9HAtz3XU7GYJjYaBmFLWHbyKa9mWzTxEY5A",
+		"cPYAx61EjwshK5SQ6fqH7QGjc8L48xiJV7VRGpYzPSbkkZqrzQ5b",
+		"cVV9UmtnnhebmSQgHhbDZWCb7zBHbiAGDB9a5M2ffe1WpqvwD5zg",
+		//"cNK7BwHmi8rZiqD2QfwJB1R6bF6qc7iVTMBNjTr2ACbsoq1vWau8",
+		//"cUZdDF9sL11ya5civzMRYVYojoojjHbmWWm1yC5uRzfBRePVbQTZ",
 	}
+	res := make([]*btcec.PrivateKey, 5)
+	for i, v := range arr {
+		privk, _ := btcec.PrivKeyFromBytes(btcec.S256(), base58.Decode(v))
+		res[i] = privk
+	}
+
+	return res
+}
+
+func TestS(t *testing.T) {
+	redeem := "5521023ac710e73e1410718530b2686ce47f12fa3c470a9eb6085976b70b01c64c9f732102c9dc4d8f419e325bbef0fe039ed6feaf2079a2ef7b27336ddb79be2ea6e334bf2102eac939f2f0873894d8bf0ef2f8bbdd32e4290cbf9632b59dee743529c0af9e802103378b4a3854c88cca8bfed2558e9875a144521df4a75ab37a206049ccef12be692103495a81957ce65e3359c114e6c2fe9f97568be491e3f24d6fa66cc542e360cd662102d43e29299971e802160a92cfcd4037e8ae83fb8f6af138684bebdc5686f3b9db21031e415c04cbc9b81fbee6e04d8c902e8f61109a2c9883a959ba528c52698c055a57ae"
+	rb, _ := hex.DecodeString(redeem)
+	hasher := sha256.New()
+	hasher.Write(rb)
+
+	addr, err := btcutil.NewAddressWitnessScriptHash(hasher.Sum(nil), &chaincfg.RegressionNetParams)
+	if err != nil {
+		t.Fatal(err)
+	}
+	str, _ := txscript.DisasmString(rb)
+	fmt.Println(str)
+
+	script, err := txscript.PayToAddrScript(btcutil.Address(addr))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	str, _ = txscript.DisasmString(script)
+	fmt.Println(str)
+	txHash, _ := chainhash.NewHashFromStr("25b9a71dc448c43ccebb7afaf78f505c9e8ee729dafe0483b69be5fefc52d868")
+	prevOut := wire.NewOutPoint(txHash, 0)
+	txIn := wire.NewTxIn(prevOut, nil, nil)
+
+	mtx := wire.NewMsgTx(wire.TxVersion)
+	mtx.AddTxIn(txIn)
+	targetAddr, _ := btcutil.DecodeAddress("mjEoyyCPsLzJ23xMX6Mti13zMyN36kzn57", &chaincfg.RegressionNetParams)
+	s, _ := txscript.PayToAddrScript(targetAddr)
+	txOut := wire.NewTxOut(btcutil.SatoshiPerBitcoin - 2000, s)
+	mtx.AddTxOut(txOut)
+
+	sigs := make([][]byte, 6)
+	sh := txscript.NewTxSigHashes(mtx)
+	for i, privk := range getPrivks() {
+		sig, err := txscript.RawTxInWitnessSignature(mtx, sh, 0, btcutil.SatoshiPerBitcoin, rb, txscript.SigHashAll, privk)
+		if err != nil {
+			t.Fatalf("no%d: %v", i, err)
+		}
+		sigs[i+1] = sig
+	}
+	sigs = append(sigs, rb)
+	mtx.TxIn[0].Witness = wire.TxWitness(sigs)
+	fmt.Println(mtx.TxIn[0].Witness.SerializeSize())
+
+	for _, v := range mtx.TxIn[0].Witness {
+		fmt.Printf("%x ", v)
+	}
+	fmt.Println()
+
+	var buf bytes.Buffer
+	err = mtx.BtcEncode(&buf, wire.ProtocolVersion, wire.LatestEncoding)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	vm, err := txscript.NewEngine(script, mtx,0, txscript.StandardVerifyFlags,nil, nil, btcutil.SatoshiPerBitcoin)
+	if err != nil {
+		t.Fatal(err)
+	}
+	//info, err := vm.DisasmPC()
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//fmt.Println(info)
+	err = vm.Execute()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fmt.Printf("tx: %s\n", hex.EncodeToString(buf.Bytes()))
+
+}
+
+func TestSS(t *testing.T) {
+	//locktx := "01000000000101cc51b096b532718ad910c3aa5aebf2a43233708cb4726c0e5dc522bfb80f9d360000000000ffffffff0540a0dfb2000000002200200a618b712d918bb1ba59b737c2a37b40d557374754ef2575ce41d08d5f782df940d64477000000002200200a618b712d918bb1ba59b737c2a37b40d557374754ef2575ce41d08d5f782df900ca9a3b000000002200206ffd48f065e61dd8e1091f1aa9819cf5b45692d68e1ce3691aaf69014e267155e04c18100000000022002014b288dca5d59caa8868d1668c97c971e58ab3ccf10534ac567ea51aa8aba299c0366aac010000002200202122f4719add322f4d727f48379f8a8ba36a40ec4473fd99a2fdcfd89a16e048040047304402204341fbd204ea7c6715db7863aa00d7b8333a6598113deb38134bd7d5619d3dab0220047126fc26778e15b32129d7d55f857f0a2f8c5ded50f0910c1fedecc2fde7dc014730440220694d8b364c41b938492e8953e5d7c697ae054d798eeeda3e0f33753d8487d75902200f157a494d7015c3136b63b4accf351cd7f98f437cf67873e48bf85cc4d0cd7a01695221022dfa322241a4946b9ead36ab9c8c55bd4c4340a1290b5bf71d23a695aeb1240a21034d82610a17c332852205e063c64fee21a77fabc7ac0e6d7ada2a820922c9a5dc2103c96d495bfdd5ba4145e3e046fee45e84a8a48ad05bd8dbb395c011a32cf9f88053ae00000000"
+	//lb, _ := hex.DecodeString(locktx)
+	//mtxLock := wire.NewMsgTx(1)
+	//mtxLock.BtcDecode(bytes.NewBuffer(lb), wire.ProtocolVersion, wire.LatestEncoding)
+	//
+	//ex := "01000000000101891b2106801ef96bbfbd7d064bcca26a50022a550233347a070ef8f37cee9dd40400000000ffffffff0740717759000000002200203eb5062a0b0850b23a599425289a091c374ca934101d03144f060c5b46a979be40717759000000002200206ffd48f065e61dd8e1091f1aa9819cf5b45692d68e1ce3691aaf69014e26715500ca9a3b00000000220020701a8d401c84fb13e6baf169d59684e17abd9fa216c8cc5b9fc63d622ff8c58d00ca9a3b000000002200200a618b712d918bb1ba59b737c2a37b40d557374754ef2575ce41d08d5f782df900ca9a3b000000002200203eb5062a0b0850b23a599425289a091c374ca934101d03144f060c5b46a979be004791130000000022002014b288dca5d59caa8868d1668c97c971e58ab3ccf10534ac567ea51aa8aba29940ec1833000000002200202122f4719add322f4d727f48379f8a8ba36a40ec4473fd99a2fdcfd89a16e048040047304402206b8213ea25faa7023176fffc8f3151c80a3fa7ff95e37c0faf5ad2a800b65591022075396d01ee61d0280120c9cc1b580172821f539c0bd6925717b509a79dc1071b01473044022001f1139d32223cfc39c73d502b36d9a0d249415af6dcce17993ae0debcd44f4d02201350bef52485ff8e5327a6fb36662667375add614067cf3489f1b9b69e31dc8c01695221022dfa322241a4946b9ead36ab9c8c55bd4c4340a1290b5bf71d23a695aeb1240a21034d82610a17c332852205e063c64fee21a77fabc7ac0e6d7ada2a820922c9a5dc2103c96d495bfdd5ba4145e3e046fee45e84a8a48ad05bd8dbb395c011a32cf9f88053ae00000000"
+	//exb, _ := hex.DecodeString(ex)
+	//mtxEx := wire.NewMsgTx(1)
+	//mtxEx.BtcDecode(bytes.NewBuffer(exb), wire.ProtocolVersion, wire.LatestEncoding)
+	//
+	//for _, v := range mtxEx.TxIn[0].Witness {
+	//	fmt.Printf("%x ", v)
+	//}
+	//fmt.Println()
+	//
+	//str, _ := txscript.DisasmString(mtxEx.TxIn[0].Witness[3])
+	//fmt.Println(str)
+	//
+	//vm, err := txscript.NewEngine(mtxLock.TxOut[4].PkScript, mtxEx,0, txscript.StandardVerifyFlags,nil,nil, mtxLock.TxOut[4].Value)
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	//
+	//err = vm.Execute()
+	//if err != nil {
+	//	t.Fatal(err)
+	//}
+	fmt.Println(hex.EncodeToString(base58.Decode("mjEoyyCPsLzJ23xMX6Mti13zMyN36kzn57")))
 }

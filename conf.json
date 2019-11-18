@@ -1,23 +1,26 @@
 {
   "btc_ob_conf": {
-    "net_type": "test",
-    "btc_ob_loop_wait_time": 300,
+    "net_type": "regtest",
+    "btc_ob_loop_wait_time": 3,
     "btc_ob_confirmations": 1,
-    "btc_json_rpc_address": "http://139.219.140.220:20332",
+    "btc_json_rpc_address": "http://172.168.3.77:18443",
     "user": "test",
-    "pwd": "test"
+    "pwd": "test",
+    "waiting_cycle": 6
   },
   "allia_ob_conf": {
     "alliance_json_rpc_address": "http://172.168.3.73:40336",
-    "allia_ob_loop_wait_time": 10,
+    "allia_ob_loop_wait_time": 3,
     "watching_key": "btcTxToRelay",
-    "wallet_file": "./wallet.dat",
-    "wallet_pwd": "passwordtest"
+    "wallet_file": "/data/gopath/multi-chain/relayer_btc/wallet.dat",
+    "wallet_pwd": "passwordtest",
+    "net_type": "testnet",
+    "waiting_cycle": 300
   },
   "retry_duration": 1,
-  "retry_times": 2,
-  "retry_db_path": "./",
+  "retry_times": 0,
+  "retry_db_path": "/data/gopath/multi-chain/relayer_btc/db",
   "log_level": 0,
-  "log_path": "",
-  "sleep_time": 10
+  "sleep_time": 10,
+  "max_read_size": 5000000
 }
